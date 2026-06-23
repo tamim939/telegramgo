@@ -21,6 +21,7 @@ export default function AdminPanel({ categories }: { categories: string[] }) {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'content' | 'banners' | 'categories'>('content');
   const [isAdding, setIsAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [newCategory, setNewCategory] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newMovie, setNewMovie] = useState<Partial<Movie>>({
@@ -78,6 +79,7 @@ export default function AdminPanel({ categories }: { categories: string[] }) {
       alert("Please fill in all banner fields");
       return;
     }
+    setSaving(true);
     try {
       await addDoc(collection(db, "banners"), {
         ...newBanner,
@@ -85,8 +87,12 @@ export default function AdminPanel({ categories }: { categories: string[] }) {
       });
       setNewBanner({ title: '', imageUrl: '', link: '' });
       fetchBanners();
+      alert("Banner added successfully!");
     } catch (e) {
       console.error("Error adding banner:", e);
+      alert("Error adding banner. Check Firebase console.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -107,20 +113,28 @@ export default function AdminPanel({ categories }: { categories: string[] }) {
       return;
     }
 
+    setSaving(true);
     try {
       const newList = [...categories, newCategory.trim()];
-      await updateDoc(doc(db, "settings", "categories"), {
-        list: newList
-      }).catch(async (err) => {
-        // If doc doesn't exist, set it
+      const categoriesDoc = doc(db, "settings", "categories");
+      
+      try {
+        await updateDoc(categoriesDoc, { list: newList });
+      } catch (err: any) {
         if (err.code === 'not-found') {
           const { setDoc } = await import('firebase/firestore');
-          await setDoc(doc(db, "settings", "categories"), { list: newList });
+          await setDoc(categoriesDoc, { list: newList });
+        } else {
+          throw err;
         }
-      });
+      }
       setNewCategory('');
+      alert("Category added successfully!");
     } catch (e) {
       console.error("Error adding category:", e);
+      alert("Error adding category. Check Firebase console.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -140,12 +154,13 @@ export default function AdminPanel({ categories }: { categories: string[] }) {
 
   const handleAdd = async () => {
     // Sync single adLink with first rotating link for compatibility
-    const mainAdLink = newMovie.adLinks?.[0] || newMovie.adLink;
+    const mainAdLink = (newMovie.adLinks && newMovie.adLinks[0]) || newMovie.adLink;
     if (!newMovie.title || !newMovie.thumbnail || !mainAdLink) {
       alert("Please fill in all required fields (Title, Thumbnail, Ad Link)");
       return;
     }
     
+    setSaving(true);
     const movieData = {
       ...newMovie,
       adLink: mainAdLink,
@@ -153,30 +168,36 @@ export default function AdminPanel({ categories }: { categories: string[] }) {
     
     try {
       if (editingId) {
-          await updateDoc(doc(db, "movies", editingId), {
-            ...movieData,
-            updatedAt: serverTimestamp()
-          });
-        } else {
-          await addDoc(collection(db, "movies"), {
-            ...movieData,
-            createdAt: serverTimestamp()
-          });
-        }
-        setIsAdding(false);
-        setEditingId(null);
-        setNewMovie({ 
-          category: 'Movie', 
-          isPremium: false, 
-          adLink: '', 
-          adLinks: [''],
-          timer: 10,
-          downloadLinks: [{ label: 'Download Server 1', url: '' }] 
+        await updateDoc(doc(db, "movies", editingId), {
+          ...movieData,
+          updatedAt: serverTimestamp()
         });
-        fetchMovies();
-      } catch (e) {
-        console.error("Error saving movie:", e);
+        alert("Movie updated successfully!");
+      } else {
+        await addDoc(collection(db, "movies"), {
+          ...movieData,
+          createdAt: serverTimestamp()
+        });
+        alert("Movie published successfully!");
       }
+      
+      setIsAdding(false);
+      setEditingId(null);
+      setNewMovie({ 
+        category: categories.find(c => c !== 'All') || 'Movie',
+        isPremium: false, 
+        adLink: '', 
+        adLinks: [''],
+        timer: 10,
+        downloadLinks: [{ label: 'Download Server 1', url: '' }] 
+      });
+      fetchMovies();
+    } catch (e: any) {
+      console.error("Error saving movie:", e);
+      alert(`Error saving movie: ${e.message || "Unknown error"}. Check if your Firebase project has Firestore enabled and rules configured.`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleEdit = (movie: Movie) => {
@@ -300,7 +321,13 @@ export default function AdminPanel({ categories }: { categories: string[] }) {
                <input type="text" placeholder="Banner Title..." className="rounded-xl bg-zinc-800 px-4 py-3 text-xs text-white focus:outline-none" value={newBanner.title} onChange={e => setNewBanner({...newBanner, title: e.target.value})} />
                <input type="text" placeholder="Image URL..." className="rounded-xl bg-zinc-800 px-4 py-3 text-xs text-white focus:outline-none" value={newBanner.imageUrl} onChange={e => setNewBanner({...newBanner, imageUrl: e.target.value})} />
                <input type="text" placeholder="Link..." className="rounded-xl bg-zinc-800 px-4 py-3 text-xs text-white focus:outline-none" value={newBanner.link} onChange={e => setNewBanner({...newBanner, link: e.target.value})} />
-               <button onClick={handleAddBanner} className="md:col-span-3 rounded-xl bg-red-600 px-6 py-3 text-xs font-black uppercase">Add Banner</button>
+               <button 
+                onClick={handleAddBanner} 
+                disabled={saving}
+                className={`md:col-span-3 rounded-xl px-6 py-3 text-xs font-black uppercase transition-all ${saving ? 'bg-zinc-700 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500'}`}
+               >
+                {saving ? 'ADDING...' : 'Add Banner'}
+               </button>
              </div>
            </div>
 
@@ -324,7 +351,13 @@ export default function AdminPanel({ categories }: { categories: string[] }) {
              <h3 className="text-sm font-black text-red-600 uppercase tracking-widest">Navigation Categories</h3>
              <div className="flex gap-2">
                <input type="text" placeholder="New Category Name..." className="flex-1 rounded-xl bg-zinc-800 px-4 py-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-red-600" value={newCategory} onChange={e => setNewCategory(e.target.value)} />
-               <button onClick={handleAddCategory} className="rounded-xl bg-red-600 px-6 py-3 text-xs font-black uppercase">Add</button>
+               <button 
+                onClick={handleAddCategory} 
+                disabled={saving}
+                className={`rounded-xl px-6 py-3 text-xs font-black uppercase transition-all ${saving ? 'bg-zinc-700 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500'}`}
+               >
+                {saving ? '...' : 'Add'}
+               </button>
              </div>
              <div className="flex flex-wrap gap-2 mt-4">
                {categories.map(cat => (
@@ -502,9 +535,10 @@ export default function AdminPanel({ categories }: { categories: string[] }) {
 
           <button 
             onClick={handleAdd}
-            className="w-full rounded-2xl bg-red-600 py-4 text-sm font-black shadow-2xl shadow-red-900/40 hover:bg-red-500 transition-all active:scale-[0.98] text-white"
+            disabled={saving}
+            className={`w-full rounded-2xl py-4 text-sm font-black shadow-2xl shadow-red-900/40 transition-all active:scale-[0.98] text-white ${saving ? 'bg-zinc-700 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500'}`}
           >
-            {editingId ? 'UPDATE CONTENT' : 'SAVE & PUBLISH'}
+            {saving ? 'SAVING...' : (editingId ? 'UPDATE CONTENT' : 'SAVE & PUBLISH')}
           </button>
         </div>
       )}

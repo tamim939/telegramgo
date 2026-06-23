@@ -137,7 +137,7 @@ export default function App() {
       setUser(tgUser);
       console.log('Telegram User from WebApp:', tgUser);
       // Auto-grant admin for @bio_matrixs as requested
-      if (tgUser.username === 'bio_matrixs' || tgUser.username === 'tamim_939') {
+      if (tgUser.username === 'bio_matrixs' || tgUser.username === 'tamim_939' || tgUser.username === 'TRADER_TAMIM_3') {
         setIsAdmin(true);
         localStorage.setItem('is_admin_active', 'true');
       }
