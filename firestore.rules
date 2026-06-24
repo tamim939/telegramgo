@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Reusable helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Movies Collection
+    match /movies/{movieId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+    
+    // Banners Collection
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+    
+    // Settings Collection (Categories etc)
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+  }
+}

@@ -194,7 +194,12 @@ export default function AdminPanel({ categories }: { categories: string[] }) {
       fetchMovies();
     } catch (e: any) {
       console.error("Error saving movie:", e);
-      alert(`Error saving movie: ${e.message || "Unknown error"}. Check if your Firebase project has Firestore enabled and rules configured.`);
+      const errorInfo = {
+        error: e.message,
+        code: e.code,
+        auth: auth.currentUser ? { uid: auth.currentUser.uid, email: auth.currentUser.email } : 'Not logged in'
+      };
+      alert(`Error saving movie: ${JSON.stringify(errorInfo, null, 2)}`);
     } finally {
       setSaving(false);
     }
